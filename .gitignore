@@ -3,3 +3,9 @@ raw_latex/
 
 # Templates
 templates/
+
+# Data
+data/**/*
+
+# Environments
+env/**/*
