@@ -1,8 +1,8 @@
-# spark-submit --packages graphframes:graphframes:0.8.2-spark3.2-s_2.12 graph_processing.py
+# spark-submit --packages graphframes:graphframes:0.8.2-spark3.2-s_2.12 sample.py
 from graphframes import GraphFrame
 from pyspark.sql import SparkSession
 
-spark = SparkSession.builder.appName('Sample').getOrCreate()
+spark = SparkSession.builder.appName('sample').getOrCreate()
 spark.sparkContext.setLogLevel('ERROR')
 
 # Sample social media
@@ -49,10 +49,9 @@ g.outDegrees.show()
 
 # Motif finding
 print('Unreciprocated Messages')
-g.find('(a)-[]->(b); !(b)-[]->(a)').show()
+g.find('(from)-[]->(to); !(to)-[]->(from)').show()
 
 # Page rank
 print('Page Rank')
 pagerank = g.pageRank(tol=.01)
 pagerank.vertices.show()
-pagerank.edges.show()
