@@ -1,4 +1,6 @@
 # python torch_classify.py data/KKI.nel
+# python torch_classify.py data/OHSU.nel
+# python torch_classify.py data/Peking_1.nel
 import argparse
 
 import dgl
@@ -8,6 +10,7 @@ from dgl.nn import GraphConv
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
 
@@ -23,6 +26,7 @@ args = parser.parse_args()
 
 fname = args.filename
 homogeneous = not args.heterogeneous
+
 
 # Create dataset
 class Dataset(DGLDataset):
@@ -44,8 +48,7 @@ class Dataset(DGLDataset):
                         edges_src = torch.Tensor(edges_src).to(torch.int32)
                         edges_dst = torch.Tensor(edges_dst).to(torch.int32)
                         graph = dgl.graph((edges_src, edges_dst), num_nodes=num_vertices)
-                        # ASDF: Adjust features
-                        graph.ndata['feat'] = torch.ones((num_vertices)).to(torch.float32)
+                        # graph.ndata['feat'] = torch.ones((num_vertices)).to(torch.float32)
                         graph.edata['weight'] = torch.Tensor(edges_val).to(torch.float32)
 
                         # Prevent error (Needs testing)
@@ -67,7 +70,7 @@ class Dataset(DGLDataset):
                     elif line[0] == 'g':
                         name = line[1]
                     elif line[0] == 'x':
-                        value = float(line[1])
+                        value = int((1 + float(line[1])) / 2)
 
         self.labels = torch.LongTensor(self.labels)
         self.classes = len(np.unique(self.labels))
@@ -100,42 +103,48 @@ test_dataloader = GraphDataLoader(
     drop_last=False,
 )
 
-it = iter(train_dataloader)
-batch = next(it)
-print(batch)
-
 # Classify
-class GCN(nn.Module):
+class Classifier(nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim):
-        super(GCN, self).__init__()
-        self.conv1 = GraphConv(in_dim, hidden_dim, activation='relu')
-        self.conv2 = GraphConv(hidden_dim, out_dim)
+        super().__init__()
+        self.conv1 = GraphConv(in_dim, hidden_dim)
+        self.conv2 = GraphConv(hidden_dim, hidden_dim)
+        self.linear = nn.Linear(hidden_dim, out_dim)
 
-    def forward(self, g, features):
-        v = self.conv1(g, features)
-        # v = nn.ReLU(v)
-        v = self.conv2(g, v)
-        g.ndata['v'] = v
-        return dgl.mean_nodes(g, 'v')
+    def forward(self, g):
+        h = g.in_degrees().view(-1, 1).float()
+        h = F.relu(self.conv1(g, h))
+        h = F.relu(self.conv2(g, h))
+        g.ndata['h'] = h
+        h_mean = dgl.mean_nodes(g, 'h')
+        return torch.sigmoid(self.linear(h_mean))
 
-# ASDF: Adjust size
-model = GCN(10, 20, dataset.classes)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+model = Classifier(1, 10, dataset.classes)
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
-for epoch in range(20):
+for epoch in range(100):
+    epoch_loss = 0
     for batched_graph, labels in train_dataloader:
-        # ASDF: Adjust features
-        pred = model(batched_graph, batched_graph.ndata['feat'])
-        loss = F.cross_entropy(pred, labels)
+        logits = model(batched_graph)
+        loss = criterion(logits, labels)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        epoch_loss += loss.detach().item()
+    epoch_loss /= len(train_dataloader)
+    if (epoch+1) % 10 == 0:
+        print(f'Epoch:{epoch+1}, loss:{epoch_loss}')
 
 num_correct = 0
 num_tests = 0
+loss = 0
 for batched_graph, labels in test_dataloader:
-    pred = model(batched_graph, batched_graph.ndata['feat'])
-    num_correct += (pred.argmax(1) == labels).sum().item()
+    logits = model(batched_graph)
+    num_correct += (logits.argmax(1) == labels).sum().item()
     num_tests += len(labels)
+    loss += criterion(logits, labels).detach().item()
+loss /= len(test_dataloader)
 
-print('Test accuracy:', num_correct / num_tests)
+print(f'Test accuracy:{num_correct / num_tests}')
+print(f'Test loss:{loss}')

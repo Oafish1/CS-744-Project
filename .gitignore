@@ -9,3 +9,6 @@ data/**/*
 
 # Environments
 env/**/*
+
+# Notes
+notes.txt
