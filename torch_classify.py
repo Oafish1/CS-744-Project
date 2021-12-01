@@ -27,6 +27,9 @@ args = parser.parse_args()
 fname = args.filename
 homogeneous = not args.heterogeneous
 
+dgl.distributed.initialize('hosts')
+torch.distributed.init_process_group(backend='gloo')
+
 
 # Create dataset
 class Dataset(DGLDataset):
@@ -82,6 +85,8 @@ class Dataset(DGLDataset):
         return len(self.graphs)
 
 dataset = Dataset('dataset')
+# print(max(g.num_nodes() for g in dataset.graphs))
+# print(min(g.num_nodes() for g in dataset.graphs))
 
 # https://docs.dgl.ai/en/0.6.x/new-tutorial/5_graph_classification.html
 num_total = len(dataset)
