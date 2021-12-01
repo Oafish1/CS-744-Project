@@ -1,7 +1,5 @@
-# python torch_classify.py data/KKI.nel
-# python torch_classify.py data/OHSU.nel
-# python torch_classify.py data/Peking_1.nel
 import argparse
+from time import perf_counter
 
 import dgl
 from dgl.data import DGLDataset
@@ -22,13 +20,32 @@ parser.add_argument(
     action='store_true',
     help='Graphs are not homogeneous',
 )
+parser.add_argument('--master-ip', dest='master_ip', type=str)
+parser.add_argument('--master-port', dest='master_port', default=6585, type=int)
+parser.add_argument('--num-nodes', dest='num_nodes', type=int)
+parser.add_argument('--rank', dest='rank', type=int)
 args = parser.parse_args()
+MASTER_IP = args.master_ip
+MASTER_PORT = args.master_port
+NUM_NODES = args.num_nodes
+RANK = args.rank
 
+args = parser.parse_args()
 fname = args.filename
 homogeneous = not args.heterogeneous
 
-dgl.distributed.initialize('hosts')
-torch.distributed.init_process_group(backend='gloo')
+# Distributed setup
+print('Initializing...')
+MAIN_RANK = 0
+torch.distributed.init_process_group(
+    'gloo',
+    init_method=f'tcp://{MASTER_IP}:{MASTER_PORT}',
+    rank=RANK,
+    world_size=NUM_NODES
+)
+WORLD_SIZE = torch.distributed.get_world_size()
+LOCAL_SIZE = torch.cuda.device_count()
+# dgl.distributed.initialize('hosts')
 
 
 # Create dataset
@@ -85,15 +102,10 @@ class Dataset(DGLDataset):
         return len(self.graphs)
 
 dataset = Dataset('dataset')
-# print(max(g.num_nodes() for g in dataset.graphs))
-# print(min(g.num_nodes() for g in dataset.graphs))
+train_dataset, test_dataset, _ = dgl.data.utils.split_dataset(dataset, frac_list=[.8, .2, 0])
 
-# https://docs.dgl.ai/en/0.6.x/new-tutorial/5_graph_classification.html
-num_total = len(dataset)
-num_train = int(num_total * 0.8)
-
-train_sampler = SubsetRandomSampler(torch.arange(num_train))
-test_sampler = SubsetRandomSampler(torch.arange(num_train, num_total))
+train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
 
 train_dataloader = GraphDataLoader(
     dataset,
@@ -128,6 +140,7 @@ model = Classifier(1, 10, dataset.classes)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
+start = perf_counter()
 for epoch in range(100):
     epoch_loss = 0
     for batched_graph, labels in train_dataloader:
@@ -139,7 +152,7 @@ for epoch in range(100):
         epoch_loss += loss.detach().item()
     epoch_loss /= len(train_dataloader)
     if (epoch+1) % 10 == 0:
-        print(f'Epoch:{epoch+1}, loss:{epoch_loss}')
+        print(f'Epoch: {epoch+1}, loss: {epoch_loss}')
 
 num_correct = 0
 num_tests = 0
@@ -151,5 +164,6 @@ for batched_graph, labels in test_dataloader:
     loss += criterion(logits, labels).detach().item()
 loss /= len(test_dataloader)
 
-print(f'Test accuracy:{num_correct / num_tests}')
-print(f'Test loss:{loss}')
+print(f'Test accuracy: {num_correct / num_tests}')
+print(f'Test loss: {loss}')
+print(f'Time: {perf_counter() - start}')
