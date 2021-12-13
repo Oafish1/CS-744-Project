@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-# Set default colors
+# Set default style
 mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=[
     # https://maketintsandshades.com/#fce5cd
     '#fce5cd',
@@ -12,6 +12,10 @@ mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=[
     '#b0a090',
     '#97897b',
 ])
+mpl.rcParams.update({
+    'font.weight': 'bold',
+    'font.size': 17
+})
 
 
 def time_visualize(*runs, arch=None, ax=None):
@@ -81,7 +85,7 @@ def per_architecture_backward_visualize(*runs, ax=None):
     ax.legend()
 
 
-def per_architecture_time_visualize(*runs, ax=None):
+def per_architecture_time_visualize(*runs, ax=None, legend=True):
     """
     Plots total time per architecture
 
@@ -107,4 +111,5 @@ def per_architecture_time_visualize(*runs, ax=None):
     ax.set_ylabel('Time (s)')
     ax.set_xlabel('Nodes')
     ax.set_title('Time by # of Nodes and Architecture')
-    ax.legend()
+    if legend:
+        ax.legend()
