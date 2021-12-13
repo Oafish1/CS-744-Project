@@ -13,3 +13,7 @@ env/**/*
 
 # Notes
 notes.txt
+
+# Python/IPython
+**/__pycache__
+**/.ipynb*
