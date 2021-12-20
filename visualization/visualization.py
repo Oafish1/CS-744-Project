@@ -14,7 +14,7 @@ mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=[
 ])
 mpl.rcParams.update({
     'font.weight': 'bold',
-    'font.size': 17
+    'font.size': 12#17
 })
 
 
@@ -83,6 +83,40 @@ def per_architecture_backward_visualize(*runs, ax=None):
     ax.set_xlabel('Nodes')
     ax.set_title('Backward Time by # of Nodes')
     ax.legend()
+
+
+def per_architecture_timesave_visualize(*runs, ax=None):
+    """
+    Plots time saved from one algorithm to another.  Assumes settings are
+    equal and ordered between runs
+
+    runs: array
+        Assumed to have entries of form
+        ['architecture name', 'setting name', forward time, backward time, total time]
+    """
+
+    if ax is None:
+        _, ax = plt.subplots()
+
+    width = 5
+
+    architectures = np.array([run[0] for run in runs]).squeeze()
+    settings = np.array([run[1] for run in runs]).squeeze()
+    totals = np.array([run[4] for run in runs]).squeeze().astype(np.float32)
+
+    assert len(np.unique(architectures)) == 2, 'Only supports 2 runs at this time.'
+    tot_by_arch = []
+    for arch in np.unique(architectures):
+        idx = architectures==arch
+        set = settings[np.argwhere(idx)].squeeze()
+        tot_by_arch.append(totals[np.argwhere(idx)].squeeze())
+
+    tot = (tot_by_arch[1] - tot_by_arch[0]) / tot_by_arch[0]
+    ax.plot(set, tot, 'd-', linewidth=width, markersize=3*width)
+
+    ax.set_ylabel('Fraction Timesave')
+    ax.set_xlabel('Nodes')
+    ax.set_title('Time Saved by Skipping')
 
 
 def per_architecture_time_visualize(*runs, ax=None, legend=True):
